@@ -2,7 +2,7 @@ import os
 import sys
 
 import requests
-from pytube import YouTube, Playlist
+from pytubefix import YouTube, Playlist
 from PyQt5 import QtWidgets, QtGui
 
 from mydesign import Ui_MainWindow
@@ -59,7 +59,6 @@ class MyWindow(QtWidgets.QMainWindow):
             if yt_type == "Video":
                 self.ui.FormatComboBox.clear()
                 video = YouTube(url)
-
                 self.ui.FormatComboBox.addItem("Audio (.mp3)")
                 self.ui.FormatComboBox.addItem("Low Quality (360p)")
                 if video.streams.filter(progressive=True, res="720p").first() is not None:
