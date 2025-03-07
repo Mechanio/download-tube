@@ -5,8 +5,7 @@ import requests
 from pytubefix import YouTube, Playlist
 from PyQt5 import QtWidgets, QtGui
 
-from tempdesign import Ui_MainWindow
-# from mydesign import Ui_MainWindow
+from mydesign import Ui_MainWindow
 from messagewindows import Ui_Dialog, Ui_Form
 
 
@@ -132,20 +131,27 @@ class MyWindow(QtWidgets.QMainWindow):
             self.only_in_playlist = names_from_playlist - names_from_folder
             self.ui.InFolderScrollArea.setText(only_in_folder)
             self.ui.InPlaylistScrollArea.setText(self.only_in_playlist)
+            self.ui.FormatComboBox_2.clear()
+            self.ui.FormatComboBox_2.addItem("Audio (.mp3)")
+            self.ui.FormatComboBox_2.addItem("Low Quality (360p)")
+            self.ui.FormatComboBox_2.addItem("High Quality (Mainly)")
             self.ui.UpdateButton.setEnabled(True)
         except Exception:
+            self.ui.FormatComboBox_2.clear()
             self.ui.InFolderScrollArea.setText("error")
 
     def update_playlist(self):
         playlist = Playlist(self.ui.UrlLine_2.text())
+        self.ui.UpdateButton.setEnabled(False)
         for video in playlist.video_urls:
             yt = YouTube(video)
             if yt.title.replace(f"{os.sep}", "") in self.only_in_playlist:
-                self.downloading(video, self.ui.FolderPathLine_2.text())
+                self.downloading(video, self.ui.FolderPathLine_2.text(), self.ui.FormatComboBox_2.currentText())
         else:
             if self.error_videos:
                 self.show_error_message_window(self.error_videos)
                 self.error_videos = []
+            self.ui.UpdateButton.setEnabled(True)
             self.show_message_window()
 
 
@@ -154,8 +160,12 @@ class MyWindow(QtWidgets.QMainWindow):
         yt_type = self.ui.TypeComboBox.currentText()
         folder_path = QtWidgets.QFileDialog.getExistingDirectory(self, 'Select Folder', directory=os.getcwd())
         if folder_path != '':
+            self.ui.Button.setEnabled(False)
+            self.ui.Button.setText("Downloading...")
+            self.ui.UrlLine.setEnabled(False)
+            self.ui.downloadProgressBar.setVisible(True)
             if yt_type == "Video":
-                self.downloading(url, folder_path)
+                self.downloading(url, folder_path, self.ui.FormatComboBox.currentText())
             elif yt_type == "Playlist":
                 self.ui.ItemsProgressBar.setVisible(True)
                 playlist = Playlist(url)
@@ -166,7 +176,7 @@ class MyWindow(QtWidgets.QMainWindow):
                     downloaded_videos += 1
                     self.ui.ItemsLabel.setText(f"{downloaded_videos}/{playlist.length}")
                     self.ui.ItemsProgressBar.setValue(downloaded_videos)
-                    self.downloading(video, folder_path)
+                    self.downloading(video, folder_path, self.ui.FormatComboBox.currentText())
                 else:
                     downloaded_videos += 1
                     self.ui.ItemsLabel.setText(f"{downloaded_videos}/{playlist.length}")
@@ -179,27 +189,23 @@ class MyWindow(QtWidgets.QMainWindow):
                         self.error_videos = []
             self.show_message_window()
 
-    def downloading(self, url, folder_path):
-        self.ui.Button.setEnabled(False)
-        self.ui.Button.setText("Downloading...")
-        self.ui.UrlLine.setEnabled(False)
-        self.ui.downloadProgressBar.setVisible(True)
-        yt = YouTube(url, on_progress_callback=on_progress)
+    def downloading(self, url, folder_path, format_option):
         try:
-            if self.ui.FormatComboBox.currentText() == "Audio (.mp3)":
-                video = yt.streams.filter(only_audio=True, abr="160kbps").first()
-                if isinstance(video, type(None)):
-                    video = yt.streams.get_audio_only()
-                video = video.download(output_path=folder_path)
-                base, ext = os.path.splitext(video)
-                new_file = base + '.mp3'
-                os.rename(video, new_file)
-            elif self.ui.FormatComboBox.currentText() == "Low Quality (360p)":
-                yt.streams.filter(progressive=True, res="360p").first().download(output_path=folder_path)
-            elif self.ui.FormatComboBox.currentText() == "High Quality (720p)":
-                yt.streams.filter(progressive=True, res="720p").first().download(output_path=folder_path)
-            elif self.ui.FormatComboBox.currentText() == "High Quality (Mainly)":
-                yt.streams.get_highest_resolution().download(output_path=folder_path)
+            yt = YouTube(url, on_progress_callback=on_progress)
+            format_map = {
+                "Audio (.mp3)": lambda yt: yt.streams.filter(only_audio=True, abr="160kbps").first() or yt.streams.get_audio_only(),
+                "Low Quality (360p)": lambda yt: yt.streams.filter(progressive=True, res="360p").first(),
+                "High Quality (720p)": lambda yt: yt.streams.filter(progressive=True, res="720p").first(),
+                "High Quality (Mainly)": lambda yt: yt.streams.get_highest_resolution()
+            }
+            video = format_map.get(format_option, lambda yt: None)(yt)
+            if video:
+                downloaded_file = video.download(output_path=folder_path)
+
+                if format_option == "Audio (.mp3)":
+                    base, ext = os.path.splitext(downloaded_file)
+                    new_file = base + ".mp3"
+                    os.rename(downloaded_file, new_file)
         except Exception:
             self.error_videos.append(f"<b>{yt.author}</b>: {yt.title}")
 
